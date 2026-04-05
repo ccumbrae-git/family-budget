@@ -178,12 +178,22 @@ export default function SettingsPage() {
                   <div className="bg-gray-800 rounded-lg px-3 py-2 text-xs text-gray-400 break-all font-mono">
                     {inviteLink}
                   </div>
-                  <button
-                    onClick={copyInvite}
-                    className="w-full py-2.5 bg-indigo-600 rounded-xl text-sm font-medium"
-                  >
-                    {copied ? '✓ Copied!' : 'Copy link'}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyInvite}
+                      className="flex-1 py-2.5 bg-gray-700 rounded-xl text-sm font-medium"
+                    >
+                      {copied ? '✓ Copied!' : 'Copy'}
+                    </button>
+                    {typeof navigator !== 'undefined' && 'share' in navigator && (
+                      <button
+                        onClick={() => navigator.share({ title: 'Join our family budget', url: inviteLink })}
+                        className="flex-1 py-2.5 bg-indigo-600 rounded-xl text-sm font-medium"
+                      >
+                        Share
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
