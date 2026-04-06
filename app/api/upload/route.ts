@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
   const { transactions, error } = parseCSV(csvText, bank)
 
   if (error) return NextResponse.json({ error }, { status: 400 })
-  if (transactions.length === 0) return NextResponse.json({ error: 'No transactions found' }, { status: 400 })
 
   // AI categorisation
   const categories = await categoriseTransactions(transactions)
