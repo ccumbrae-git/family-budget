@@ -6,8 +6,8 @@ function parseDate(raw: string): string | null {
   if (!raw) return null
   const formats = [
     'dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd',
-    'dd MMM yyyy', 'dd-MM-yyyy', 'd/MM/yyyy',
-    'dd/MM/yy', 'M/d/yyyy', 'd MMM yyyy', 'dd-MMM-yyyy'
+    'dd MMM yyyy', 'dd MMM yy', 'd MMM yyyy', 'd MMM yy',
+    'dd-MM-yyyy', 'd/MM/yyyy', 'dd/MM/yy', 'M/d/yyyy', 'dd-MMM-yyyy'
   ]
   for (const fmt of formats) {
     try {
@@ -38,6 +38,8 @@ function detectBank(headers: string[]): Bank | null {
   if (h.includes('credit') && h.includes('debit')) return 'ing'
   // Macquarie old format: date, description, amount, balance
   if (h.includes('amount') && h.includes('balance')) return 'macquarie'
+  // Qantas CC: has merchant name or transaction details column
+  if (h.includes('merchantname') || h.includes('transactiondetails')) return 'qantas_cc'
   // Qantas CC: amount, no balance
   if (h.includes('amount') && !h.includes('balance')) return 'qantas_cc'
   return null
@@ -123,14 +125,14 @@ function parseNAB(rows: Record<string, string>[]): ParsedTransaction[] {
 
 function parseQantasCC(rows: Record<string, string>[]): ParsedTransaction[] {
   return rows.map(row => {
-    const date = parseDate(field(row, 'date', 'transaction date'))
-    const rawAmount = parseFloat(
-      field(row, 'amount', 'debit amount').replace(/[$,]/g, '')
-    )
-    const amount = -Math.abs(rawAmount)
+    const date = parseDate(field(row, 'date', 'transaction date', 'processed on'))
+    // Amount already has correct sign: negative = expense, positive = payment
+    const amount = parseFloat(field(row, 'amount', 'debit amount').replace(/[$,]/g, ''))
+    // Prefer Merchant Name, fall back to Transaction Details, then Description
+    const description = field(row, 'merchant name', 'transaction details', 'description', 'merchant', 'narrative').trim()
     return {
       date: date || '',
-      description: field(row, 'description', 'merchant', 'narrative').trim(),
+      description,
       amount,
     }
   }).filter(t => t.date && t.description && !isNaN(t.amount))
