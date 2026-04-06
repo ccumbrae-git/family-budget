@@ -39,6 +39,7 @@ export default function BudgetsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editLimit, setEditLimit] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [applyingAll, setApplyingAll] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -104,6 +105,26 @@ export default function BudgetsPage() {
     setEditingId(null)
   }
 
+  async function applyAllSuggestions() {
+    if (!token || suggestions.length === 0) return
+    setApplyingAll(true)
+    const res = await fetch('/api/budgets/apply-suggestions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ suggestions })
+    })
+    if (res.ok) {
+      const [b, s] = await Promise.all([
+        fetch('/api/budgets', { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
+        fetch('/api/budgets/suggest', { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
+      ])
+      setBudgets(b)
+      setSuggestions(s)
+      setShowSuggestions(false)
+    }
+    setApplyingAll(false)
+  }
+
   async function deleteBudget(id: string) {
     if (!token) return
     await fetch(`/api/budgets?id=${id}`, {
@@ -148,6 +169,13 @@ export default function BudgetsPage() {
             </button>
           </div>
           <p className="text-xs text-indigo-300/70">Based on your last 3 months of spending</p>
+          <button
+            onClick={applyAllSuggestions}
+            disabled={applyingAll}
+            className="w-full py-2 bg-indigo-600 rounded-lg text-sm font-medium disabled:opacity-50"
+          >
+            {applyingAll ? 'Applying...' : `Apply all ${unusedSuggestions.length} suggestions`}
+          </button>
 
           {showSuggestions && (
             <div className="space-y-2">
