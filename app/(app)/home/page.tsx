@@ -23,10 +23,7 @@ interface Budget {
   categories: { id: string; name: string; subcategory: string; icon: string; color: string }
 }
 
-interface Vendor {
-  name: string
-  total: number
-}
+interface Vendor { name: string; total: number }
 
 interface DashboardData {
   month: string
@@ -39,7 +36,7 @@ interface DashboardData {
   isFamily: boolean
 }
 
-const PIE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316']
+const COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316']
 
 export default function Dashboard() {
   const { signOut, user, token } = useAuth()
@@ -94,9 +91,9 @@ export default function Dashboard() {
   const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
 
   const budgetMap = new Map(budgets.map(b => [b.category_id, b]))
-  const prevSpendMap = new Map(prevSpend.map(s => [s.category_name + '|' + s.subcategory, s.total]))
+  const prevSpendMap = new Map(prevSpend.map(s => [`${s.category_name}|${s.subcategory}`, s.total]))
 
-  // Category groups (summed)
+  // Category totals
   const catGroupMap = spend.reduce((acc, s) => {
     const key = s.category_name || 'Other'
     acc.set(key, (acc.get(key) || 0) + s.total)
@@ -109,43 +106,53 @@ export default function Dashboard() {
 
   // Alerts
   const alerts = budgets.map(b => {
+    const limit = Number(b.monthly_limit)
     const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
-    const pct = b.monthly_limit > 0 ? (spent / b.monthly_limit) * 100 : 0
-    return { b, spent, pct, isOver: spent > b.monthly_limit, isWarn: pct >= b.alert_at_percent && spent <= b.monthly_limit }
+    const pct = limit > 0 ? (spent / limit) * 100 : 0
+    return { b, spent, pct, isOver: spent > limit, isWarn: pct >= b.alert_at_percent && spent <= limit }
   }).filter(x => x.isOver || x.isWarn).sort((a, b) => b.pct - a.pct)
 
-  // Over-budget categories
   const overBudget = budgets.filter(b => {
     const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
-    return spent > b.monthly_limit
+    return spent > Number(b.monthly_limit)
   })
 
   // Smart insights
   const insights: string[] = []
   if (topCategories[0]) insights.push(`${topCategories[0][0]} is your biggest spend at $${topCategories[0][1].toLocaleString('en-AU', { maximumFractionDigits: 0 })}`)
-  if (vsLastMonth !== null) {
-    const dir = vsLastMonth > 0 ? 'up' : 'down'
-    insights.push(`Total spend is ${dir} ${Math.abs(vsLastMonth).toFixed(0)}% vs last month`)
-  }
-  if (overBudget.length > 0) insights.push(`${overBudget.length} ${overBudget.length === 1 ? 'category is' : 'categories are'} over budget this month`)
+  if (vsLastMonth !== null) insights.push(`Total spend is ${vsLastMonth > 0 ? 'up' : 'down'} ${Math.abs(vsLastMonth).toFixed(0)}% vs last month`)
+  if (overBudget.length > 0) insights.push(`${overBudget.length} ${overBudget.length === 1 ? 'category is' : 'categories are'} over budget`)
   if (data?.topVendors?.[0]) insights.push(`${data.topVendors[0].name} is your top merchant at $${data.topVendors[0].total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`)
-  const biggestSubcat = topSubcats[0]
-  if (biggestSubcat) {
-    const prev = prevSpendMap.get(biggestSubcat.category_name + '|' + biggestSubcat.subcategory) || 0
+  if (topSubcats[0]) {
+    const prev = prevSpendMap.get(`${topSubcats[0].category_name}|${topSubcats[0].subcategory}`) || 0
     if (prev > 0) {
-      const chg = ((biggestSubcat.total - prev) / prev) * 100
-      if (Math.abs(chg) > 10) insights.push(`${biggestSubcat.subcategory} is ${chg > 0 ? 'up' : 'down'} ${Math.abs(chg).toFixed(0)}% vs last month`)
+      const chg = ((topSubcats[0].total - prev) / prev) * 100
+      if (Math.abs(chg) > 10) insights.push(`${topSubcats[0].subcategory} is ${chg > 0 ? 'up' : 'down'} ${Math.abs(chg).toFixed(0)}% vs last month`)
     }
   }
 
-  // Pie data (top 8 categories + other)
+  // Category bar chart data
+  const catChartData = topCategories.slice(0, 8).map(([name, total]) => ({
+    name: name.length > 12 ? name.slice(0, 11) + '…' : name,
+    fullName: name,
+    total: Math.round(total)
+  }))
+
+  // Subcategory bar chart data
+  const subcatChartData = topSubcats.slice(0, 8).map(s => ({
+    name: s.subcategory.length > 12 ? s.subcategory.slice(0, 11) + '…' : s.subcategory,
+    fullName: s.subcategory,
+    total: Math.round(s.total)
+  }))
+
+  // Pie chart data
   const pieData = topCategories.slice(0, 8).map(([name, total]) => ({ name, value: Math.round(total) }))
   if (topCategories.length > 8) {
-    const rest = topCategories.slice(8).reduce((s, [, v]) => s + v, 0)
-    pieData.push({ name: 'Other', value: Math.round(rest) })
+    pieData.push({ name: 'Other', value: Math.round(topCategories.slice(8).reduce((s, [, v]) => s + v, 0)) })
   }
 
-  const maxCat = topCategories[0]?.[1] || 1
+  const tooltipStyle = { background: '#1f2937', border: 'none', borderRadius: '8px', fontSize: '12px' }
+  const labelStyle = { color: '#9ca3af' }
 
   return (
     <div className="px-4 pt-6 space-y-6 pb-6">
@@ -158,9 +165,7 @@ export default function Dashboard() {
             {firstName} {data?.isFamily && <span className="text-indigo-400 text-base font-normal">· Family</span>}
           </h1>
         </div>
-        <button onClick={signOut} className="text-gray-500 text-sm px-3 py-1 rounded-lg border border-gray-800">
-          Sign out
-        </button>
+        <button onClick={signOut} className="text-gray-500 text-sm px-3 py-1 rounded-lg border border-gray-800">Sign out</button>
       </div>
 
       {/* Month selector */}
@@ -172,20 +177,18 @@ export default function Dashboard() {
         {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
 
-      {/* ── HERO: Total spend ── */}
+      {/* ── HERO ── */}
       <div className="bg-gradient-to-br from-indigo-900/60 to-indigo-800/30 border border-indigo-700/30 rounded-2xl p-5">
         <p className="text-indigo-300 text-sm">Total spent · {format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}</p>
         <p className="text-4xl font-bold mt-1">${totalSpend.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
-        <div className="flex items-center gap-3 mt-1">
-          <p className="text-indigo-300/60 text-xs">{spend.length} categories</p>
+        <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <p className="text-indigo-300/60 text-xs">{topCategories.length} categories</p>
           {vsLastMonth !== null && (
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${vsLastMonth > 0 ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'}`}>
               {vsLastMonth > 0 ? '▲' : '▼'} {Math.abs(vsLastMonth).toFixed(0)}% vs last month
             </span>
           )}
         </div>
-
-        {/* Quick stat chips */}
         <div className="flex gap-2 mt-4 flex-wrap">
           {budgets.length > 0 && (
             <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
@@ -196,10 +199,6 @@ export default function Dashboard() {
           <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
             <p className="text-lg font-bold">{(data?.topVendors || []).length}</p>
             <p className="text-indigo-300/70 text-xs">Merchants</p>
-          </div>
-          <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
-            <p className="text-lg font-bold">{topCategories.length}</p>
-            <p className="text-indigo-300/70 text-xs">Categories</p>
           </div>
           {prevTotal > 0 && (
             <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
@@ -214,8 +213,7 @@ export default function Dashboard() {
       {alerts.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
-            Smart Alerts
+            <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Smart Alerts
           </h2>
           {alerts.map(({ b, spent, pct, isOver }) => (
             <div key={b.id} className={`rounded-xl p-3.5 border flex items-center justify-between ${isOver ? 'bg-red-900/20 border-red-700/50' : 'bg-amber-900/20 border-amber-700/50'}`}>
@@ -224,9 +222,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm font-medium">{b.categories?.subcategory}</p>
                   <p className={`text-xs ${isOver ? 'text-red-400' : 'text-amber-400'}`}>
-                    {isOver
-                      ? `$${(spent - b.monthly_limit).toLocaleString('en-AU', { maximumFractionDigits: 0 })} over limit`
-                      : `${Math.round(pct)}% of $${b.monthly_limit.toLocaleString()} budget`}
+                    {isOver ? `$${(spent - Number(b.monthly_limit)).toLocaleString('en-AU', { maximumFractionDigits: 0 })} over limit` : `${Math.round(pct)}% of $${Number(b.monthly_limit).toLocaleString()} budget`}
                   </p>
                 </div>
               </div>
@@ -238,16 +234,14 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── SMART INSIGHTS ── */}
+      {/* ── INSIGHTS ── */}
       {insights.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
-            <span className="text-base">💡</span> Insights
-          </h2>
+          <h2 className="text-sm font-semibold text-gray-400">💡 Insights</h2>
           <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
             {insights.map((ins, i) => (
               <div key={i} className="flex items-center gap-3 px-4 py-3">
-                <span className="text-indigo-400 text-base shrink-0">→</span>
+                <span className="text-indigo-400 text-sm shrink-0">→</span>
                 <p className="text-sm text-gray-200">{ins}</p>
               </div>
             ))}
@@ -258,11 +252,12 @@ export default function Dashboard() {
       {/* ── CATEGORIES OVER BUDGET ── */}
       {overBudget.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-gray-400">🚨 Categories over budget</h2>
+          <h2 className="text-sm font-semibold text-gray-400">🚨 Over budget</h2>
           <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
             {overBudget.map(b => {
+              const limit = Number(b.monthly_limit)
               const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
-              const pct = Math.round((spent / b.monthly_limit) * 100)
+              const pct = Math.round((spent / limit) * 100)
               return (
                 <div key={b.id} className="px-4 py-3">
                   <div className="flex items-center justify-between mb-1.5">
@@ -272,7 +267,7 @@ export default function Dashboard() {
                     </div>
                     <p className="text-sm font-bold text-red-400">
                       ${spent.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
-                      <span className="text-xs font-normal text-gray-500"> / ${b.monthly_limit.toLocaleString()}</span>
+                      <span className="text-xs font-normal text-gray-500"> / ${limit.toLocaleString()}</span>
                     </p>
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -286,64 +281,46 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── HIGH SPEND CATEGORIES ── */}
-      {topCategories.length > 0 && (
+      {/* ── HIGH SPEND — CATEGORIES (column chart) ── */}
+      {catChartData.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-400">📊 High spend — categories</h2>
-          <div className="bg-gray-900 rounded-xl p-4 space-y-3">
-            {topCategories.slice(0, 8).map(([name, total], i) => {
-              const bar = (total / maxCat) * 100
-              const prevCatTotal = prevSpend.filter(s => s.category_name === name).reduce((s, x) => s + x.total, 0)
-              const chg = prevCatTotal > 0 ? ((total - prevCatTotal) / prevCatTotal) * 100 : null
-              return (
-                <div key={name}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                      <p className="text-sm font-medium">{name}</p>
-                      {chg !== null && (
-                        <span className={`text-xs px-1.5 py-0.5 rounded ${chg > 10 ? 'text-red-400' : chg < -10 ? 'text-green-400' : 'text-gray-500'}`}>
-                          {chg > 0 ? '+' : ''}{chg.toFixed(0)}%
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold">${total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
-                  </div>
-                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${bar}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                  </div>
-                </div>
-              )
-            })}
+          <div className="bg-gray-900 rounded-xl p-4">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={catChartData} margin={{ top: 4, right: 4, left: 4, bottom: 40 }}>
+                <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" interval={0} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v: number, _: unknown, props: { payload?: { fullName?: string } }) => [`$${v.toLocaleString('en-AU')}`, props.payload?.fullName || '']}
+                  contentStyle={tooltipStyle} labelStyle={labelStyle} labelFormatter={() => ''}
+                />
+                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                  {catChartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* ── HIGH SPEND SUBCATEGORIES ── */}
-      {topSubcats.length > 0 && (
+      {/* ── HIGH SPEND — SUBCATEGORIES (column chart) ── */}
+      {subcatChartData.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-400">🔍 High spend — sub-categories</h2>
-          <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
-            {topSubcats.map((s, i) => {
-              const prev = prevSpendMap.get(s.category_name + '|' + s.subcategory) || 0
-              const chg = prev > 0 ? ((s.total - prev) / prev) * 100 : null
-              return (
-                <div key={i} className="flex items-center justify-between px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{s.subcategory}</p>
-                    <p className="text-xs text-gray-500">{s.category_name}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {chg !== null && (
-                      <span className={`text-xs ${chg > 10 ? 'text-red-400' : chg < -10 ? 'text-green-400' : 'text-gray-500'}`}>
-                        {chg > 0 ? '+' : ''}{chg.toFixed(0)}%
-                      </span>
-                    )}
-                    <p className="text-sm font-semibold">${s.total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
-                  </div>
-                </div>
-              )
-            })}
+          <div className="bg-gray-900 rounded-xl p-4">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={subcatChartData} margin={{ top: 4, right: 4, left: 4, bottom: 40 }}>
+                <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" interval={0} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v: number, _: unknown, props: { payload?: { fullName?: string } }) => [`$${v.toLocaleString('en-AU')}`, props.payload?.fullName || '']}
+                  contentStyle={tooltipStyle} labelStyle={labelStyle} labelFormatter={() => ''}
+                />
+                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                  {subcatChartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
@@ -355,53 +332,29 @@ export default function Dashboard() {
           <div className="bg-gray-900 rounded-xl p-4">
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  dataKey="value"
-                  paddingAngle={2}
-                >
-                  {pieData.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
+                <Pie data={pieData} cx="50%" cy="45%" innerRadius={55} outerRadius={85} dataKey="value" paddingAngle={2}>
+                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
-                <Tooltip
-                  formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, '']}
-                  contentStyle={{ background: '#1f2937', border: 'none', borderRadius: '8px', fontSize: '12px' }}
-                  labelStyle={{ color: '#9ca3af' }}
-                />
-                <Legend
-                  iconType="circle"
-                  iconSize={8}
-                  formatter={(value) => <span style={{ color: '#9ca3af', fontSize: '11px' }}>{value}</span>}
-                />
+                <Tooltip formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, '']} contentStyle={tooltipStyle} labelStyle={labelStyle} />
+                <Legend iconType="circle" iconSize={8} formatter={(value) => <span style={{ color: '#9ca3af', fontSize: '11px' }}>{value}</span>} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* ── MONTHLY TREND ── */}
+      {/* ── MONTHLY TREND (column chart) ── */}
       {data?.trend && data.trend.some(t => t.total > 0) && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-400">📈 Monthly trend</h2>
           <div className="bg-gray-900 rounded-xl p-4">
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={data.trend} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={150}>
+              <BarChart data={data.trend} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                 <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis hide />
-                <Tooltip
-                  formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, 'Spend']}
-                  contentStyle={{ background: '#1f2937', border: 'none', borderRadius: '8px', fontSize: '12px' }}
-                  labelStyle={{ color: '#9ca3af' }}
-                />
+                <Tooltip formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, 'Spend']} contentStyle={tooltipStyle} labelStyle={labelStyle} />
                 <Bar dataKey="total" radius={[4, 4, 0, 0]}>
-                  {data.trend.map((entry, i) => (
-                    <Cell key={i} fill={entry.month === selectedMonth ? '#6366f1' : '#312e81'} />
-                  ))}
+                  {data.trend.map((entry, i) => <Cell key={i} fill={entry.month === selectedMonth ? '#6366f1' : '#312e81'} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -413,26 +366,21 @@ export default function Dashboard() {
       {(data?.topVendors || []).length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-400">🏪 High spend merchants</h2>
-          <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
-            {data!.topVendors.map((v, i) => {
-              const maxV = data!.topVendors[0].total
-              return (
-                <div key={i} className="px-4 py-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-3">
-                      <div className="w-7 h-7 rounded-lg bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-400 shrink-0">
-                        {v.name[0]?.toUpperCase()}
-                      </div>
-                      <p className="text-sm font-medium truncate max-w-[160px]">{v.name}</p>
-                    </div>
-                    <p className="text-sm font-semibold shrink-0">${v.total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
-                  </div>
-                  <div className="h-1 bg-gray-800 rounded-full overflow-hidden ml-10">
-                    <div className="h-full bg-indigo-600/60 rounded-full" style={{ width: `${(v.total / maxV) * 100}%` }} />
-                  </div>
-                </div>
-              )
-            })}
+          <div className="bg-gray-900 rounded-xl p-4">
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart
+                data={data!.topVendors.slice(0, 8).map(v => ({ name: v.name.length > 10 ? v.name.slice(0, 9) + '…' : v.name, fullName: v.name, total: Math.round(v.total) }))}
+                margin={{ top: 4, right: 4, left: 4, bottom: 40 }}
+              >
+                <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} angle={-35} textAnchor="end" interval={0} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v: number, _: unknown, props: { payload?: { fullName?: string } }) => [`$${v.toLocaleString('en-AU')}`, props.payload?.fullName || '']}
+                  contentStyle={tooltipStyle} labelStyle={labelStyle} labelFormatter={() => ''}
+                />
+                <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

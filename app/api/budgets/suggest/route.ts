@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   // Average monthly spend + 10% buffer
   const suggestions = Array.from(spendByCategory.entries())
-    .filter(([, v]) => v.months >= 1)
+    .filter(([categoryId, v]) => categoryId !== 'null' && categoryId && v.name && v.subcategory)
     .map(([categoryId, v]) => ({
       category_id: categoryId,
       category_name: v.name,
