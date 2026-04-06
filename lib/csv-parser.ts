@@ -86,16 +86,24 @@ function parseMacquarie(rows: Record<string, string>[]): ParsedTransaction[] {
 function parseING(rows: Record<string, string>[]): ParsedTransaction[] {
   return rows.map(row => {
     const date = parseDate(field(row, 'date'))
-    const credit = parseFloat(field(row, 'credit').replace(/[$,]/g, '')) || 0
-    const debit = parseFloat(field(row, 'debit').replace(/[$,]/g, '')) || 0
-    const amount = credit > 0 ? credit : -Math.abs(debit)
+    const creditRaw = field(row, 'credit').replace(/[$,]/g, '')
+    const debitRaw = field(row, 'debit').replace(/[$,]/g, '')
+    const credit = parseFloat(creditRaw) || 0
+    const debit = parseFloat(debitRaw) || 0
+    // ING exports debit as already-negative values; credit is positive
+    let amount: number
+    if (creditRaw && credit !== 0) {
+      amount = credit // positive = money in
+    } else {
+      amount = debit // already negative in ING export
+    }
     return {
       date: date || '',
       description: field(row, 'description', 'narrative', 'details').trim(),
       amount,
       balance: parseFloat(field(row, 'balance').replace(/[$,]/g, '')) || 0
     }
-  }).filter(t => t.date && t.description)
+  }).filter(t => t.date && t.description && !isNaN(t.amount))
 }
 
 function parseNAB(rows: Record<string, string>[]): ParsedTransaction[] {
@@ -137,6 +145,7 @@ export function parseCSV(csvText: string, bankHint?: Bank): {
   const result = Papa.parse<Record<string, string>>(cleaned, {
     header: true,
     skipEmptyLines: true,
+    delimiter: '', // auto-detect (comma or tab)
     transformHeader: (h) => h.trim()
   })
 
