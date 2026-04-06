@@ -33,6 +33,8 @@ export default function TransactionsPage() {
   })
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [recategorising, setRecategorising] = useState(false)
+  const [recatResult, setRecatResult] = useState('')
 
   const months = Array.from({ length: 12 }, (_, i) => {
     const d = subMonths(new Date(), i)
@@ -71,6 +73,20 @@ export default function TransactionsPage() {
     )
   })
 
+  async function recategoriseAll() {
+    if (!token) return
+    setRecategorising(true)
+    setRecatResult('')
+    const res = await fetch('/api/transactions/recategorise', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` }
+    })
+    const data = await res.json()
+    setRecatResult(data.updated > 0 ? `✓ Categorised ${data.updated} transactions` : '✓ All transactions already categorised')
+    setRecategorising(false)
+    fetchTransactions()
+  }
+
   async function updateCategory(txId: string, categoryId: string) {
     if (!token) return
     const res = await fetch('/api/transactions', {
@@ -94,7 +110,17 @@ export default function TransactionsPage() {
 
   return (
     <div className="px-4 pt-6 space-y-4">
-      <h1 className="text-xl font-bold">Transactions</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold">Transactions</h1>
+        <button
+          onClick={recategoriseAll}
+          disabled={recategorising}
+          className="text-xs px-3 py-1.5 bg-indigo-600 rounded-lg disabled:opacity-50"
+        >
+          {recategorising ? 'Categorising...' : '✨ Re-categorise'}
+        </button>
+      </div>
+      {recatResult && <p className="text-xs text-green-400">{recatResult}</p>}
 
       <div className="flex gap-2">
         <select
