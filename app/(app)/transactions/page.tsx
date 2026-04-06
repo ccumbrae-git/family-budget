@@ -46,7 +46,8 @@ export default function TransactionsPage() {
       const res = await fetch(`/api/transactions?month=${selectedMonth}&limit=100`, {
         headers: { authorization: `Bearer ${token}` }
       })
-      setTransactions(await res.json())
+      const data = await res.json()
+      setTransactions(Array.isArray(data) ? data : [])
     } finally {
       setLoading(false)
     }

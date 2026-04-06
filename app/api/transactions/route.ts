@@ -21,7 +21,6 @@ export async function GET(req: NextRequest) {
     .select('*, categories(*), accounts(bank, account_name)')
     .eq('user_id', user.id)
     .order('date', { ascending: false })
-    .limit(limit)
     .range(offset, offset + limit - 1)
 
   if (month) {
