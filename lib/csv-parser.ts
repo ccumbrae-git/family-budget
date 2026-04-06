@@ -64,19 +64,21 @@ function cleanCSV(csvText: string): string {
 function parseMacquarie(rows: Record<string, string>[]): ParsedTransaction[] {
   return rows.map(row => {
     const date = parseDate(field(row, 'date', 'transaction date'))
-    // Support both single Amount column and split Debit/Credit columns
     const amountRaw = field(row, 'amount')
     let amount: number
     if (amountRaw) {
       amount = parseFloat(amountRaw.replace(/[$,]/g, ''))
     } else {
+      // Macquarie exports Debit as positive number = money out, Credit as positive = money in
       const debit = parseFloat(field(row, 'debit').replace(/[$,]/g, '')) || 0
       const credit = parseFloat(field(row, 'credit').replace(/[$,]/g, '')) || 0
       amount = credit > 0 ? credit : -Math.abs(debit)
     }
+    // Prefer Original Description (clean merchant name) over Details (verbose)
+    const description = field(row, 'original description', 'description', 'details', 'narrative').trim()
     return {
       date: date || '',
-      description: field(row, 'description', 'details', 'narrative', 'original description').trim(),
+      description,
       amount,
       balance: parseFloat(field(row, 'balance').replace(/[$,]/g, '')) || 0
     }
