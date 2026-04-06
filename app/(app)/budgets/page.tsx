@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
-import { format } from 'date-fns'
+import { format, subMonths } from 'date-fns'
 
 interface Category {
   id: string
@@ -43,17 +43,26 @@ export default function BudgetsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editLimit, setEditLimit] = useState('')
   const [applyingAll, setApplyingAll] = useState(false)
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
 
   const now = new Date()
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const month = selectedMonth
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const d = subMonths(now, i)
+    return { value: format(d, 'yyyy-MM'), label: format(d, 'MMM yyyy') }
+  })
 
   useEffect(() => {
     if (!token) return
+    setLoading(true)
     Promise.all([
       fetch('/api/budgets', { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch('/api/categories', { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch('/api/budgets/suggest', { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
-      fetch(`/api/dashboard?month=${month}`, { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch(`/api/dashboard?month=${selectedMonth}`, { headers: { authorization: `Bearer ${token}` } }).then(r => r.json()),
     ]).then(([b, c, s, dash]) => {
       setBudgets(Array.isArray(b) ? b : [])
       setCategories(Array.isArray(c) ? c : [])
@@ -61,7 +70,7 @@ export default function BudgetsPage() {
       setSpend(Array.isArray(dash?.spend) ? dash.spend : [])
       setLoading(false)
     })
-  }, [token, month])
+  }, [token, selectedMonth])
 
   const spendMap = new Map(spend.map(s => [s.category_id, s.total]))
   const budgetMap = new Map(budgets.map(b => [b.category_id, b]))
@@ -128,7 +137,6 @@ export default function BudgetsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">Budgets</h1>
-          <p className="text-gray-400 text-sm mt-0.5">{format(now, 'MMMM yyyy')}</p>
         </div>
         {suggestions.length > 0 && (
           <button
@@ -142,6 +150,15 @@ export default function BudgetsPage() {
           </button>
         )}
       </div>
+
+      {/* Month selector */}
+      <select
+        value={selectedMonth}
+        onChange={e => setSelectedMonth(e.target.value)}
+        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+      >
+        {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+      </select>
 
       {/* Summary chips */}
       <div className="flex gap-2">

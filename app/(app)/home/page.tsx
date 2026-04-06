@@ -132,14 +132,14 @@ export default function Dashboard() {
   }
 
   // Category bar chart data
-  const catChartData = topCategories.slice(0, 8).map(([name, total]) => ({
+  const catChartData = topCategories.filter(([name]) => name).slice(0, 8).map(([name, total]) => ({
     name: name.length > 12 ? name.slice(0, 11) + '…' : name,
     fullName: name,
     total: Math.round(total)
   }))
 
   // Subcategory bar chart data
-  const subcatChartData = topSubcats.slice(0, 8).map(s => ({
+  const subcatChartData = topSubcats.filter(s => s.subcategory).slice(0, 8).map(s => ({
     name: s.subcategory.length > 12 ? s.subcategory.slice(0, 11) + '…' : s.subcategory,
     fullName: s.subcategory,
     total: Math.round(s.total)
