@@ -79,8 +79,8 @@ export default function UploadPage() {
       } else {
         setResult({ error: json.error })
       }
-    } catch {
-      setResult({ error: 'Upload failed. Please try again.' })
+    } catch (err) {
+      setResult({ error: `Upload failed: ${err instanceof Error ? err.message : String(err)}` })
     } finally {
       setUploading(false)
     }

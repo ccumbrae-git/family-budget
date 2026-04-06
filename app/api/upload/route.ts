@@ -31,8 +31,13 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error }, { status: 400 })
 
-  // AI categorisation
-  const categories = await categoriseTransactions(transactions)
+  // AI categorisation (non-fatal — falls back to uncategorised if it fails)
+  let categories: Awaited<ReturnType<typeof categoriseTransactions>> = []
+  try {
+    categories = await categoriseTransactions(transactions)
+  } catch (err) {
+    console.error('Categorisation failed, importing uncategorised:', err)
+  }
 
   // Fetch all categories from DB for lookup
   const { data: dbCategories } = await supabase.from('categories').select('*')
