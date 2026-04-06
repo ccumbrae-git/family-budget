@@ -5,6 +5,16 @@ import { parseCSV } from '@/lib/csv-parser'
 import { categoriseTransactions } from '@/lib/categorise'
 import { Bank } from '@/lib/types'
 
+function isTransferDescription(desc: string): boolean {
+  const d = desc.toLowerCase()
+  return d.startsWith('transfer to') || d.startsWith('transfer from') ||
+    d.startsWith('payment to') || d.startsWith('payment from') ||
+    d.startsWith('direct credit') || d.includes('osko') ||
+    d.includes('pay anyone') || d.includes('credit card payment') ||
+    d.includes('loan repayment') || d.includes('home loan') ||
+    d.includes('savings transfer')
+}
+
 export async function POST(req: NextRequest) {
   const supabase = createServiceClient()
 
@@ -58,6 +68,7 @@ export async function POST(req: NextRequest) {
       category_id: categoryId || null,
       merchant: cat?.merchant || null,
       raw_description: t.description,
+      is_transfer: cat?.isTransfer || isTransferDescription(t.description),
     }
   })
 

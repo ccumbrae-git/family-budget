@@ -8,6 +8,7 @@ interface CategoryResult {
   category: string
   subcategory: string
   merchant: string
+  isTransfer: boolean
 }
 
 export interface DbCategory {
@@ -59,7 +60,8 @@ Available categories (format: Category > Subcategory):
 ${categoryList}
 
 Rules:
-- Income transactions (positive amounts): use Income > Salary or Income > Transfer or Income > Refund
+- Internal transfers between own accounts = Income > Transfer (e.g. "Transfer to", "Transfer from", "Payment to", "Payment from", "Direct credit", "Direct debit transfer", "Online transfer", "Funds transfer", "Pay anyone", "Auto transfer")
+- Positive amounts (income): use Income > Salary, Income > Transfer, or Income > Refund
 - Woolworths, Coles, Aldi, IGA = Food & Groceries > Supermarket
 - UberEats, DoorDash, Menulog = Dining Out > Takeaway & Delivery
 - Uber, Ola, DiDi (no food) = Transport > Ride Share
@@ -67,6 +69,7 @@ Rules:
 - Netflix, Spotify, Disney+, Stan = Entertainment > Streaming Services
 - ATM withdrawals = Financial > ATM Withdrawal
 - Salary/pay = Income > Salary
+- Credit card payments, loan repayments, savings transfers = Income > Transfer
 
 Respond with a JSON array ONLY, no other text:
 [{"i": 0, "category": "...", "subcategory": "...", "merchant": "..."}]`,
@@ -83,7 +86,8 @@ Respond with a JSON array ONLY, no other text:
       transactionIndex: startIndex + p.i,
       category: p.category?.trim(),
       subcategory: p.subcategory?.trim(),
-      merchant: p.merchant?.trim()
+      merchant: p.merchant?.trim(),
+      isTransfer: p.category?.trim() === 'Income' && p.subcategory?.trim() === 'Transfer'
     }))
   } catch {
     return []

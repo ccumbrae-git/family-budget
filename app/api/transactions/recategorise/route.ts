@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (!categoryId) continue
     await supabase
       .from('transactions')
-      .update({ category_id: categoryId, merchant: cat.merchant || tx.merchant })
+      .update({ category_id: categoryId, merchant: cat.merchant || tx.merchant, is_transfer: cat.isTransfer })
       .eq('id', tx.id)
     updated++
   }
