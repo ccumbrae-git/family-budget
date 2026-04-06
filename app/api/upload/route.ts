@@ -67,13 +67,74 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
+  // Auto-set budgets on first upload
+  const budgetsApplied = await autoSetBudgetsIfNone(supabase, user.id)
+
   // Check budgets and send alerts after import
   await checkAndSendAlerts(supabase, user.id)
 
   return NextResponse.json({
     imported: rows.length,
-    message: `Successfully imported ${rows.length} transactions`
+    budgetsApplied,
+    message: budgetsApplied > 0
+      ? `Imported ${rows.length} transactions and set ${budgetsApplied} budgets from your history`
+      : `Successfully imported ${rows.length} transactions`
   })
+}
+
+async function autoSetBudgetsIfNone(supabase: ReturnType<typeof createServiceClient>, userId: string): Promise<number> {
+  // Only run if user has no budgets yet
+  const { data: existing } = await supabase.from('budgets').select('id').eq('user_id', userId).limit(1)
+  if (existing && existing.length > 0) return 0
+
+  // Get user's family_id
+  const { data: profile } = await supabase.from('profiles').select('family_id').eq('id', userId).single()
+  const familyId = profile?.family_id ?? null
+
+  // Get all distinct months with transactions for this user
+  const { data: txMonths } = await supabase
+    .from('transactions')
+    .select('date')
+    .eq('user_id', userId)
+    .lt('amount', 0)
+    .order('date', { ascending: true })
+
+  if (!txMonths?.length) return 0
+
+  const monthSet = new Set(txMonths.map(t => t.date.slice(0, 7)))
+  const months = Array.from(monthSet)
+
+  // Aggregate spend per category across all months
+  const spendByCategory = new Map<string, { name: string; subcategory: string; total: number; months: number }>()
+
+  for (const month of months) {
+    const { data } = await supabase.rpc('get_monthly_spend', { p_user_id: userId, p_month: month })
+    for (const row of (data || [])) {
+      const existing = spendByCategory.get(row.category_id)
+      if (existing) {
+        existing.total += row.total
+        existing.months++
+      } else {
+        spendByCategory.set(row.category_id, { name: row.category_name, subcategory: row.subcategory, total: row.total, months: 1 })
+      }
+    }
+  }
+
+  if (spendByCategory.size === 0) return 0
+
+  // Build budgets: avg monthly spend + 10% buffer, rounded to nearest $10
+  const upserts = Array.from(spendByCategory.entries()).map(([categoryId, v]) => ({
+    user_id: userId,
+    family_id: familyId,
+    category_id: categoryId,
+    monthly_limit: Math.ceil((v.total / v.months) * 1.1 / 10) * 10,
+    alert_at_percent: 80
+  }))
+
+  const { error } = await supabase.from('budgets').upsert(upserts, { onConflict: 'user_id,category_id' })
+  if (error) return 0
+
+  return upserts.length
 }
 
 async function checkAndSendAlerts(supabase: ReturnType<typeof createServiceClient>, userId: string) {
