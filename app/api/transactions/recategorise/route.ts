@@ -11,27 +11,30 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get all uncategorised transactions for this user
   const { data: txs } = await supabase
     .from('transactions')
     .select('id, description, amount, merchant')
     .eq('user_id', user.id)
     .is('category_id', null)
-    .limit(500)
+    .limit(50)
 
   if (!txs?.length) return NextResponse.json({ updated: 0 })
 
   const { data: dbCategories } = await supabase.from('categories').select('*')
-  const catMap = new Map((dbCategories || []).map(c => [`${c.name}|${c.subcategory}`, c.id]))
+  const cats = dbCategories || []
+
+  // Case-insensitive lookup map
+  const catMap = new Map(cats.map(c => [`${c.name.toLowerCase()}|${c.subcategory.toLowerCase()}`, c.id]))
 
   const parsed = txs.map(t => ({ date: '', description: t.description, amount: t.amount }))
-  const categories = await categoriseTransactions(parsed)
+  const results = await categoriseTransactions(parsed, cats)
 
   let updated = 0
-  for (const cat of categories) {
+  for (const cat of results) {
     const tx = txs[cat.transactionIndex]
     if (!tx) continue
-    const categoryId = catMap.get(`${cat.category}|${cat.subcategory}`)
+    const key = `${cat.category.toLowerCase()}|${cat.subcategory.toLowerCase()}`
+    const categoryId = catMap.get(key)
     if (!categoryId) continue
     await supabase
       .from('transactions')

@@ -3,7 +3,10 @@ export const dynamic = 'force-dynamic'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { format, subMonths } from 'date-fns'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie, Legend
+} from 'recharts'
 
 interface SpendItem {
   category_id: string
@@ -20,15 +23,6 @@ interface Budget {
   categories: { id: string; name: string; subcategory: string; icon: string; color: string }
 }
 
-interface Transaction {
-  id: string
-  date: string
-  description: string
-  amount: number
-  merchant?: string
-  categories?: { name: string; subcategory: string; icon: string; color: string }
-}
-
 interface Vendor {
   name: string
   total: number
@@ -38,12 +32,14 @@ interface DashboardData {
   month: string
   totalSpend: number
   spend: SpendItem[]
+  prevSpend: SpendItem[]
   budgets: Budget[]
-  recentTransactions: Transaction[]
   topVendors: Vendor[]
   trend: { month: string; label: string; total: number }[]
   isFamily: boolean
 }
+
+const PIE_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#8b5cf6','#ec4899','#06b6d4','#84cc16','#f97316']
 
 export default function Dashboard() {
   const { signOut, user, token } = useAuth()
@@ -61,8 +57,7 @@ export default function Dashboard() {
       const res = await fetch(`/api/dashboard?month=${selectedMonth}`, {
         headers: { authorization: `Bearer ${token}` }
       })
-      const json = await res.json()
-      setData(json)
+      setData(await res.json())
     } finally {
       setLoading(false)
     }
@@ -75,6 +70,14 @@ export default function Dashboard() {
     return { value: format(d, 'yyyy-MM'), label: format(d, 'MMM yyyy') }
   })
 
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Good morning'
+    if (h < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'
+
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -83,50 +86,77 @@ export default function Dashboard() {
     )
   }
 
-  const budgetMap = new Map((data?.budgets || []).map(b => [b.category_id, b]))
+  const spend = data?.spend || []
+  const prevSpend = data?.prevSpend || []
+  const budgets = data?.budgets || []
+  const totalSpend = data?.totalSpend || 0
+  const prevTotal = prevSpend.reduce((s, x) => s + x.total, 0)
+  const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
 
-  // Issues: over budget or warning
-  const issues = (data?.budgets || []).map(budget => {
-    const spent = data?.spend.find(s => s.category_id === budget.category_id)?.total || 0
-    const percent = (spent / budget.monthly_limit) * 100
-    const isOver = spent > budget.monthly_limit
-    const isWarning = percent >= budget.alert_at_percent && !isOver
-    return { budget, spent, percent, isOver, isWarning }
-  }).filter(i => i.isOver || i.isWarning)
-    .sort((a, b) => b.percent - a.percent)
+  const budgetMap = new Map(budgets.map(b => [b.category_id, b]))
+  const prevSpendMap = new Map(prevSpend.map(s => [s.category_name + '|' + s.subcategory, s.total]))
 
-  // All budget items for budget section
-  const budgetItems = (data?.budgets || []).map(budget => {
-    const spent = data?.spend.find(s => s.category_id === budget.category_id)?.total || 0
-    const percent = Math.min((spent / budget.monthly_limit) * 100, 100)
-    const isOver = spent > budget.monthly_limit
-    const isWarning = percent >= budget.alert_at_percent && !isOver
-    return { budget, spent, percent, isOver, isWarning }
-  }).sort((a, b) => b.percent - a.percent)
+  // Category groups (summed)
+  const catGroupMap = spend.reduce((acc, s) => {
+    const key = s.category_name || 'Other'
+    acc.set(key, (acc.get(key) || 0) + s.total)
+    return acc
+  }, new Map<string, number>())
+  const topCategories = Array.from(catGroupMap.entries()).sort((a, b) => b[1] - a[1])
 
-  // Top spend categories (all, sorted by amount)
-  const topCategories = (data?.spend || []).slice(0, 10)
+  // Top subcategories
+  const topSubcats = [...spend].sort((a, b) => b.total - a.total).slice(0, 10)
 
-  // Max spend for bar width calc
-  const maxSpend = topCategories[0]?.total || 1
+  // Alerts
+  const alerts = budgets.map(b => {
+    const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
+    const pct = b.monthly_limit > 0 ? (spent / b.monthly_limit) * 100 : 0
+    return { b, spent, pct, isOver: spent > b.monthly_limit, isWarn: pct >= b.alert_at_percent && spent <= b.monthly_limit }
+  }).filter(x => x.isOver || x.isWarn).sort((a, b) => b.pct - a.pct)
 
-  const greeting = () => {
-    const h = new Date().getHours()
-    if (h < 12) return 'Good morning'
-    if (h < 17) return 'Good afternoon'
-    return 'Good evening'
+  // Over-budget categories
+  const overBudget = budgets.filter(b => {
+    const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
+    return spent > b.monthly_limit
+  })
+
+  // Smart insights
+  const insights: string[] = []
+  if (topCategories[0]) insights.push(`${topCategories[0][0]} is your biggest spend at $${topCategories[0][1].toLocaleString('en-AU', { maximumFractionDigits: 0 })}`)
+  if (vsLastMonth !== null) {
+    const dir = vsLastMonth > 0 ? 'up' : 'down'
+    insights.push(`Total spend is ${dir} ${Math.abs(vsLastMonth).toFixed(0)}% vs last month`)
+  }
+  if (overBudget.length > 0) insights.push(`${overBudget.length} ${overBudget.length === 1 ? 'category is' : 'categories are'} over budget this month`)
+  if (data?.topVendors?.[0]) insights.push(`${data.topVendors[0].name} is your top merchant at $${data.topVendors[0].total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}`)
+  const biggestSubcat = topSubcats[0]
+  if (biggestSubcat) {
+    const prev = prevSpendMap.get(biggestSubcat.category_name + '|' + biggestSubcat.subcategory) || 0
+    if (prev > 0) {
+      const chg = ((biggestSubcat.total - prev) / prev) * 100
+      if (Math.abs(chg) > 10) insights.push(`${biggestSubcat.subcategory} is ${chg > 0 ? 'up' : 'down'} ${Math.abs(chg).toFixed(0)}% vs last month`)
+    }
   }
 
-  const firstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'
+  // Pie data (top 8 categories + other)
+  const pieData = topCategories.slice(0, 8).map(([name, total]) => ({ name, value: Math.round(total) }))
+  if (topCategories.length > 8) {
+    const rest = topCategories.slice(8).reduce((s, [, v]) => s + v, 0)
+    pieData.push({ name: 'Other', value: Math.round(rest) })
+  }
+
+  const maxCat = topCategories[0]?.[1] || 1
 
   return (
-    <div className="px-4 pt-6 space-y-5 pb-4">
+    <div className="px-4 pt-6 space-y-6 pb-6">
 
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <p className="text-gray-400 text-sm">{greeting()},</p>
-          <h1 className="text-xl font-bold capitalize">{firstName} {data?.isFamily && <span className="text-indigo-400 text-base font-normal">· Family</span>}</h1>
+          <h1 className="text-xl font-bold capitalize">
+            {firstName} {data?.isFamily && <span className="text-indigo-400 text-base font-normal">· Family</span>}
+          </h1>
         </div>
         <button onClick={signOut} className="text-gray-500 text-sm px-3 py-1 rounded-lg border border-gray-800">
           Sign out
@@ -139,55 +169,64 @@ export default function Dashboard() {
         onChange={e => setSelectedMonth(e.target.value)}
         className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
       >
-        {months.map(m => (
-          <option key={m.value} value={m.value}>{m.label}</option>
-        ))}
+        {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
 
-      {/* Total spend + trend */}
-      <div className="bg-gradient-to-br from-indigo-900/50 to-indigo-800/30 border border-indigo-700/30 rounded-2xl p-5">
-        <p className="text-indigo-300 text-sm">Total spent in {format(new Date(selectedMonth + '-01'), 'MMMM')}</p>
-        <p className="text-4xl font-bold mt-1">${(data?.totalSpend || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</p>
-        <p className="text-indigo-300/60 text-xs mt-1">{data?.spend.length || 0} categories</p>
-        {data?.trend && data.trend.some(t => t.total > 0) && (
-          <div className="mt-4">
-            <ResponsiveContainer width="100%" height={60}>
-              <BarChart data={data.trend} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="label" tick={{ fill: '#818cf8', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Tooltip
-                  formatter={(v) => [`$${Number(v).toLocaleString()}`, '']}
-                  contentStyle={{ background: '#1f2937', border: 'none', borderRadius: '8px', fontSize: '12px' }}
-                  labelStyle={{ color: '#9ca3af' }}
-                />
-                <Bar dataKey="total" radius={[3, 3, 0, 0]}>
-                  {data.trend.map((entry, i) => (
-                    <Cell key={i} fill={entry.month === selectedMonth ? '#a5b4fc' : '#312e81'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+      {/* ── HERO: Total spend ── */}
+      <div className="bg-gradient-to-br from-indigo-900/60 to-indigo-800/30 border border-indigo-700/30 rounded-2xl p-5">
+        <p className="text-indigo-300 text-sm">Total spent · {format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}</p>
+        <p className="text-4xl font-bold mt-1">${totalSpend.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+        <div className="flex items-center gap-3 mt-1">
+          <p className="text-indigo-300/60 text-xs">{spend.length} categories</p>
+          {vsLastMonth !== null && (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${vsLastMonth > 0 ? 'bg-red-900/40 text-red-400' : 'bg-green-900/40 text-green-400'}`}>
+              {vsLastMonth > 0 ? '▲' : '▼'} {Math.abs(vsLastMonth).toFixed(0)}% vs last month
+            </span>
+          )}
+        </div>
+
+        {/* Quick stat chips */}
+        <div className="flex gap-2 mt-4 flex-wrap">
+          {budgets.length > 0 && (
+            <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
+              <p className="text-lg font-bold">{overBudget.length}</p>
+              <p className="text-indigo-300/70 text-xs">Over budget</p>
+            </div>
+          )}
+          <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
+            <p className="text-lg font-bold">{(data?.topVendors || []).length}</p>
+            <p className="text-indigo-300/70 text-xs">Merchants</p>
           </div>
-        )}
+          <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
+            <p className="text-lg font-bold">{topCategories.length}</p>
+            <p className="text-indigo-300/70 text-xs">Categories</p>
+          </div>
+          {prevTotal > 0 && (
+            <div className="bg-black/20 rounded-xl px-3 py-2 text-center min-w-[70px]">
+              <p className="text-lg font-bold">${Math.round(prevTotal / 1000)}k</p>
+              <p className="text-indigo-300/70 text-xs">Last month</p>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Issues */}
-      {issues.length > 0 && (
+      {/* ── SMART ALERTS ── */}
+      {alerts.length > 0 && (
         <div className="space-y-2">
           <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-            Alerts
+            <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+            Smart Alerts
           </h2>
-          {issues.map(({ budget, spent, percent, isOver }) => (
-            <div key={budget.id} className={`rounded-xl p-3.5 border flex items-center justify-between ${isOver ? 'bg-red-900/20 border-red-700/50' : 'bg-amber-900/20 border-amber-700/50'}`}>
+          {alerts.map(({ b, spent, pct, isOver }) => (
+            <div key={b.id} className={`rounded-xl p-3.5 border flex items-center justify-between ${isOver ? 'bg-red-900/20 border-red-700/50' : 'bg-amber-900/20 border-amber-700/50'}`}>
               <div className="flex items-center gap-2.5">
-                <span className="text-xl">{budget.categories?.icon}</span>
+                <span className="text-xl">{b.categories?.icon}</span>
                 <div>
-                  <p className="text-sm font-medium">{budget.categories?.subcategory}</p>
+                  <p className="text-sm font-medium">{b.categories?.subcategory}</p>
                   <p className={`text-xs ${isOver ? 'text-red-400' : 'text-amber-400'}`}>
                     {isOver
-                      ? `Over by $${(spent - budget.monthly_limit).toLocaleString('en-AU', { maximumFractionDigits: 0 })}`
-                      : `${Math.round(percent)}% of $${budget.monthly_limit.toLocaleString()} budget`}
+                      ? `$${(spent - b.monthly_limit).toLocaleString('en-AU', { maximumFractionDigits: 0 })} over limit`
+                      : `${Math.round(pct)}% of $${b.monthly_limit.toLocaleString()} budget`}
                   </p>
                 </div>
               </div>
@@ -199,33 +238,79 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Top spending categories */}
-      {topCategories.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-gray-400">Spending by category</h2>
-          <div className="bg-gray-900 rounded-xl p-4 space-y-3">
-            {topCategories.map((s, i) => {
-              const budget = budgetMap.get(s.category_id)
-              const barPercent = (s.total / maxSpend) * 100
-              const overBudget = budget && s.total > budget.monthly_limit
+      {/* ── SMART INSIGHTS ── */}
+      {insights.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-400 flex items-center gap-1.5">
+            <span className="text-base">💡</span> Insights
+          </h2>
+          <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
+            {insights.map((ins, i) => (
+              <div key={i} className="flex items-center gap-3 px-4 py-3">
+                <span className="text-indigo-400 text-base shrink-0">→</span>
+                <p className="text-sm text-gray-200">{ins}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── CATEGORIES OVER BUDGET ── */}
+      {overBudget.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-400">🚨 Categories over budget</h2>
+          <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
+            {overBudget.map(b => {
+              const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
+              const pct = Math.round((spent / b.monthly_limit) * 100)
               return (
-                <div key={i}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm">{s.subcategory} <span className="text-gray-500 text-xs">· {s.category_name}</span></p>
+                <div key={b.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
-                      {budget && (
-                        <span className={`text-xs ${overBudget ? 'text-red-400' : 'text-gray-500'}`}>
-                          /{budget.monthly_limit.toLocaleString()}
-                        </span>
-                      )}
-                      <p className="text-sm font-semibold">${s.total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                      <span>{b.categories?.icon}</span>
+                      <p className="text-sm font-medium">{b.categories?.subcategory}</p>
                     </div>
+                    <p className="text-sm font-bold text-red-400">
+                      ${spent.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
+                      <span className="text-xs font-normal text-gray-500"> / ${b.monthly_limit.toLocaleString()}</span>
+                    </p>
                   </div>
                   <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${overBudget ? 'bg-red-500' : 'bg-indigo-500'}`}
-                      style={{ width: `${barPercent}%` }}
-                    />
+                    <div className="h-full bg-red-500 rounded-full" style={{ width: `${Math.min(pct, 100)}%` }} />
+                  </div>
+                  <p className="text-xs text-red-400 mt-1">{pct}% used</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── HIGH SPEND CATEGORIES ── */}
+      {topCategories.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-400">📊 High spend — categories</h2>
+          <div className="bg-gray-900 rounded-xl p-4 space-y-3">
+            {topCategories.slice(0, 8).map(([name, total], i) => {
+              const bar = (total / maxCat) * 100
+              const prevCatTotal = prevSpend.filter(s => s.category_name === name).reduce((s, x) => s + x.total, 0)
+              const chg = prevCatTotal > 0 ? ((total - prevCatTotal) / prevCatTotal) * 100 : null
+              return (
+                <div key={name}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                      <p className="text-sm font-medium">{name}</p>
+                      {chg !== null && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${chg > 10 ? 'text-red-400' : chg < -10 ? 'text-green-400' : 'text-gray-500'}`}>
+                          {chg > 0 ? '+' : ''}{chg.toFixed(0)}%
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold">${total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${bar}%`, background: PIE_COLORS[i % PIE_COLORS.length] }} />
                   </div>
                 </div>
               )
@@ -234,83 +319,127 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Top vendors */}
-      {(data?.topVendors || []).length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-gray-400">Top vendors</h2>
+      {/* ── HIGH SPEND SUBCATEGORIES ── */}
+      {topSubcats.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-400">🔍 High spend — sub-categories</h2>
           <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
-            {data!.topVendors.map((v, i) => (
-              <div key={i} className="flex items-center justify-between px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-400">
-                    {v.name[0]?.toUpperCase()}
+            {topSubcats.map((s, i) => {
+              const prev = prevSpendMap.get(s.category_name + '|' + s.subcategory) || 0
+              const chg = prev > 0 ? ((s.total - prev) / prev) * 100 : null
+              return (
+                <div key={i} className="flex items-center justify-between px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium">{s.subcategory}</p>
+                    <p className="text-xs text-gray-500">{s.category_name}</p>
                   </div>
-                  <p className="text-sm font-medium">{v.name}</p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {chg !== null && (
+                      <span className={`text-xs ${chg > 10 ? 'text-red-400' : chg < -10 ? 'text-green-400' : 'text-gray-500'}`}>
+                        {chg > 0 ? '+' : ''}{chg.toFixed(0)}%
+                      </span>
+                    )}
+                    <p className="text-sm font-semibold">${s.total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                  </div>
                 </div>
-                <p className="text-sm font-semibold">${v.total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* Budget progress */}
-      {budgetItems.length > 0 && (
+      {/* ── PIE CHART ── */}
+      {pieData.length > 0 && (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-gray-400">Budgets</h2>
-          {budgetItems.map(({ budget, spent, percent, isOver, isWarning }) => (
-            <div key={budget.id} className={`bg-gray-900 rounded-xl p-4 border ${isOver ? 'border-red-800/50' : isWarning ? 'border-amber-800/50' : 'border-gray-800'}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{budget.categories?.icon}</span>
-                  <div>
-                    <p className="text-sm font-medium">{budget.categories?.subcategory}</p>
-                    <p className="text-xs text-gray-500">{budget.categories?.name}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className={`text-sm font-semibold ${isOver ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-white'}`}>
-                    ${spent.toLocaleString('en-AU', { maximumFractionDigits: 0 })}
-                  </p>
-                  <p className="text-xs text-gray-500">of ${budget.monthly_limit.toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${isOver ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-indigo-500'}`}
-                  style={{ width: `${percent}%` }}
+          <h2 className="text-sm font-semibold text-gray-400">🥧 Spending breakdown</h2>
+          <div className="bg-gray-900 rounded-xl p-4">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  dataKey="value"
+                  paddingAngle={2}
+                >
+                  {pieData.map((_, i) => (
+                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, '']}
+                  contentStyle={{ background: '#1f2937', border: 'none', borderRadius: '8px', fontSize: '12px' }}
+                  labelStyle={{ color: '#9ca3af' }}
                 />
-              </div>
-            </div>
-          ))}
+                <Legend
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value) => <span style={{ color: '#9ca3af', fontSize: '11px' }}>{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
 
-      {/* Recent transactions */}
-      {data?.recentTransactions && data.recentTransactions.length > 0 && (
-        <div className="space-y-3 pb-2">
-          <h2 className="text-sm font-semibold text-gray-400">Recent transactions</h2>
+      {/* ── MONTHLY TREND ── */}
+      {data?.trend && data.trend.some(t => t.total > 0) && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-400">📈 Monthly trend</h2>
+          <div className="bg-gray-900 rounded-xl p-4">
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={data.trend} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <XAxis dataKey="label" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Tooltip
+                  formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, 'Spend']}
+                  contentStyle={{ background: '#1f2937', border: 'none', borderRadius: '8px', fontSize: '12px' }}
+                  labelStyle={{ color: '#9ca3af' }}
+                />
+                <Bar dataKey="total" radius={[4, 4, 0, 0]}>
+                  {data.trend.map((entry, i) => (
+                    <Cell key={i} fill={entry.month === selectedMonth ? '#6366f1' : '#312e81'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* ── TOP MERCHANTS ── */}
+      {(data?.topVendors || []).length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-gray-400">🏪 High spend merchants</h2>
           <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
-            {data.recentTransactions.map(t => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{t.merchant || t.description}</p>
-                  <p className="text-xs text-gray-500">
-                    {t.categories ? `${t.categories.icon} ${t.categories.subcategory}` : 'Uncategorised'} · {format(new Date(t.date), 'd MMM')}
-                  </p>
+            {data!.topVendors.map((v, i) => {
+              const maxV = data!.topVendors[0].total
+              return (
+                <div key={i} className="px-4 py-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 rounded-lg bg-gray-800 flex items-center justify-center text-xs font-bold text-gray-400 shrink-0">
+                        {v.name[0]?.toUpperCase()}
+                      </div>
+                      <p className="text-sm font-medium truncate max-w-[160px]">{v.name}</p>
+                    </div>
+                    <p className="text-sm font-semibold shrink-0">${v.total.toLocaleString('en-AU', { maximumFractionDigits: 0 })}</p>
+                  </div>
+                  <div className="h-1 bg-gray-800 rounded-full overflow-hidden ml-10">
+                    <div className="h-full bg-indigo-600/60 rounded-full" style={{ width: `${(v.total / maxV) * 100}%` }} />
+                  </div>
                 </div>
-                <p className="text-sm font-semibold text-red-400 ml-3 shrink-0">
-                  -${Math.abs(t.amount).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
 
       {/* Empty state */}
-      {!loading && data?.totalSpend === 0 && (
-        <div className="text-center py-12 text-gray-500">
+      {!loading && totalSpend === 0 && (
+        <div className="text-center py-16 text-gray-500">
           <p className="text-4xl mb-3">📂</p>
           <p className="text-sm">No transactions for this month.</p>
           <p className="text-xs mt-1">Upload your bank statements to get started.</p>

@@ -81,7 +81,8 @@ export default function TransactionsPage() {
       method: 'POST',
       headers: { authorization: `Bearer ${token}` }
     })
-    const data = await res.json()
+    const text = await res.text()
+    const data = text ? JSON.parse(text) : {}
     setRecatResult(data.updated > 0 ? `✓ Categorised ${data.updated} transactions` : '✓ All transactions already categorised')
     setRecategorising(false)
     fetchTransactions()

@@ -31,24 +31,24 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error }, { status: 400 })
 
+  // Fetch all categories from DB for lookup
+  const { data: dbCategories } = await supabase.from('categories').select('*')
+  const cats = dbCategories || []
+  const catMap = new Map(cats.map(c => [`${c.name.toLowerCase()}|${c.subcategory.toLowerCase()}`, c.id]))
+
   // AI categorisation (non-fatal — falls back to uncategorised if it fails)
   let categories: Awaited<ReturnType<typeof categoriseTransactions>> = []
   try {
-    categories = await categoriseTransactions(transactions)
+    categories = await categoriseTransactions(transactions, cats)
   } catch (err) {
     console.error('Categorisation failed, importing uncategorised:', err)
   }
 
-  // Fetch all categories from DB for lookup
-  const { data: dbCategories } = await supabase.from('categories').select('*')
-  const catMap = new Map(
-    (dbCategories || []).map(c => [`${c.name}|${c.subcategory}`, c.id])
-  )
-
   // Build transaction rows
   const rows = transactions.map((t, i) => {
     const cat = categories.find(c => c.transactionIndex === i)
-    const categoryId = cat ? catMap.get(`${cat.category}|${cat.subcategory}`) : null
+    const key = cat ? `${cat.category.toLowerCase()}|${cat.subcategory.toLowerCase()}` : null
+    const categoryId = key ? catMap.get(key) : null
     return {
       account_id: accountId,
       user_id: user.id,

@@ -102,6 +102,19 @@ export async function GET(req: NextRequest) {
     .slice(0, 8)
     .map(([name, total]) => ({ name, total }))
 
+  // Previous month spend (for comparisons)
+  const [prevYear, prevMonthNum] = month.split('-').map(Number)
+  const prevDate = new Date(prevYear, prevMonthNum - 2, 1)
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
+  let prevSpend: { category_id: string; category_name: string; subcategory: string; total: number }[] = []
+  if (familyId) {
+    const { data } = await supabase.rpc('get_family_monthly_spend', { p_family_id: familyId, p_month: prevMonth })
+    prevSpend = data || []
+  } else {
+    const { data } = await supabase.rpc('get_monthly_spend', { p_user_id: user.id, p_month: prevMonth })
+    prevSpend = data || []
+  }
+
   // Monthly spend trend (last 6 months)
   const trend = []
   for (let i = 5; i >= 0; i--) {
@@ -132,8 +145,8 @@ export async function GET(req: NextRequest) {
     month,
     totalSpend,
     spend,
+    prevSpend,
     budgets: budgets || [],
-    recentTransactions: recent || [],
     topVendors,
     trend,
     isFamily: !!familyId
