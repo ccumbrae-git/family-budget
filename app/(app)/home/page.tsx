@@ -132,18 +132,24 @@ export default function Dashboard() {
   }
 
   // Category bar chart data
-  const catChartData = topCategories.filter(([name]) => name).slice(0, 8).map(([name, total]) => ({
-    name: name.length > 12 ? name.slice(0, 11) + '…' : name,
-    fullName: name,
-    total: Math.round(total)
-  }))
+  const catChartData = topCategories.slice(0, 8).map(([name, total]) => {
+    const label = name || 'Uncategorised'
+    return {
+      name: label.length > 12 ? label.slice(0, 11) + '…' : label,
+      fullName: label,
+      total: Math.round(total)
+    }
+  })
 
   // Subcategory bar chart data
-  const subcatChartData = topSubcats.filter(s => s.subcategory).slice(0, 8).map(s => ({
-    name: s.subcategory.length > 12 ? s.subcategory.slice(0, 11) + '…' : s.subcategory,
-    fullName: s.subcategory,
-    total: Math.round(s.total)
-  }))
+  const subcatChartData = topSubcats.slice(0, 8).map(s => {
+    const label = s.subcategory || 'Uncategorised'
+    return {
+      name: label.length > 12 ? label.slice(0, 11) + '…' : label,
+      fullName: label,
+      total: Math.round(s.total)
+    }
+  })
 
   // Pie chart data
   const pieData = topCategories.slice(0, 8).map(([name, total]) => ({ name, value: Math.round(total) }))
