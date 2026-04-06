@@ -30,9 +30,15 @@ function field(row: Record<string, string>, ...keys: string[]): string {
 
 function detectBank(headers: string[]): Bank | null {
   const h = headers.map(x => x.toLowerCase().replace(/[^a-z]/g, ''))
-  if (h.includes('account')) return 'nab'
+  // Macquarie new format: has 'transactiondate' and 'details'
+  if (h.includes('transactiondate') || (h.includes('details') && h.includes('balance'))) return 'macquarie'
+  // NAB: has "account" but not the macquarie pattern
+  if (h.includes('account') && !h.includes('details')) return 'nab'
+  // ING: separate credit/debit columns
   if (h.includes('credit') && h.includes('debit')) return 'ing'
-  if (h.includes('amount') && h.includes('balance') && !h.includes('account')) return 'macquarie'
+  // Macquarie old format: date, description, amount, balance
+  if (h.includes('amount') && h.includes('balance')) return 'macquarie'
+  // Qantas CC: amount, no balance
   if (h.includes('amount') && !h.includes('balance')) return 'qantas_cc'
   return null
 }
@@ -57,11 +63,20 @@ function cleanCSV(csvText: string): string {
 
 function parseMacquarie(rows: Record<string, string>[]): ParsedTransaction[] {
   return rows.map(row => {
-    const date = parseDate(field(row, 'date'))
-    const amount = parseFloat(field(row, 'amount').replace(/[$,]/g, ''))
+    const date = parseDate(field(row, 'date', 'transaction date'))
+    // Support both single Amount column and split Debit/Credit columns
+    const amountRaw = field(row, 'amount')
+    let amount: number
+    if (amountRaw) {
+      amount = parseFloat(amountRaw.replace(/[$,]/g, ''))
+    } else {
+      const debit = parseFloat(field(row, 'debit').replace(/[$,]/g, '')) || 0
+      const credit = parseFloat(field(row, 'credit').replace(/[$,]/g, '')) || 0
+      amount = credit > 0 ? credit : -Math.abs(debit)
+    }
     return {
       date: date || '',
-      description: field(row, 'description', 'narrative', 'details').trim(),
+      description: field(row, 'description', 'details', 'narrative', 'original description').trim(),
       amount,
       balance: parseFloat(field(row, 'balance').replace(/[$,]/g, '')) || 0
     }
