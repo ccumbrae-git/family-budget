@@ -74,6 +74,34 @@ export async function GET(req: NextRequest) {
 
   const { data: recent } = await recentQuery
 
+  // Top vendors by spend this month
+  let vendorQuery = supabase
+    .from('transactions')
+    .select('merchant, description, amount')
+    .gte('date', start)
+    .lte('date', end)
+    .lt('amount', 0)
+    .not('merchant', 'is', null)
+
+  if (familyId) {
+    const { data: members } = await supabase.from('profiles').select('id').eq('family_id', familyId)
+    const memberIds = (members || []).map((m: { id: string }) => m.id)
+    vendorQuery = vendorQuery.in('user_id', memberIds)
+  } else {
+    vendorQuery = vendorQuery.eq('user_id', user.id)
+  }
+
+  const { data: vendorTx } = await vendorQuery
+  const vendorMap = new Map<string, number>()
+  for (const tx of vendorTx || []) {
+    const key = tx.merchant || tx.description
+    vendorMap.set(key, (vendorMap.get(key) || 0) + Math.abs(tx.amount))
+  }
+  const topVendors = Array.from(vendorMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, total]) => ({ name, total }))
+
   // Monthly spend trend (last 6 months)
   const trend = []
   for (let i = 5; i >= 0; i--) {
@@ -106,6 +134,7 @@ export async function GET(req: NextRequest) {
     spend,
     budgets: budgets || [],
     recentTransactions: recent || [],
+    topVendors,
     trend,
     isFamily: !!familyId
   })
