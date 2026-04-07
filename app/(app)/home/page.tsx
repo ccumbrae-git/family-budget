@@ -263,22 +263,13 @@ export default function Dashboard() {
 
       {/* ── Filters (month + category + subcategory) ── */}
       <div className="space-y-2">
-        {/* Month chips — horizontally scrollable */}
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none" style={{ scrollbarWidth: 'none' }}>
-          {months.map(m => (
-            <button
-              key={m.value}
-              onClick={() => setSelectedMonth(m.value)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                selectedMonth === m.value
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white/[0.06] text-gray-400'
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <select
+          value={selectedMonth}
+          onChange={e => setSelectedMonth(e.target.value)}
+          className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+        >
+          {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
 
         <div className="flex gap-2">
           <select
