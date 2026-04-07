@@ -33,6 +33,8 @@ export default function TransactionsPage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
   const [search, setSearch] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [selectedSubcategory, setSelectedSubcategory] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [recategorising, setRecategorising] = useState(false)
   const [recatResult, setRecatResult] = useState('')
@@ -64,14 +66,23 @@ export default function TransactionsPage() {
       .then(r => r.json()).then(setCategories)
   }, [token])
 
+  const categoryOptions = Array.from(new Set(categories.map(c => c.name).filter(Boolean))).sort()
+  const subcategoryOptions = selectedCategory
+    ? categories.filter(c => c.name === selectedCategory).map(c => c.subcategory).sort()
+    : []
+
   const filtered = transactions.filter(t => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return (
-      t.description.toLowerCase().includes(q) ||
-      (t.merchant?.toLowerCase().includes(q)) ||
-      (t.categories?.subcategory.toLowerCase().includes(q))
-    )
+    if (selectedCategory && t.categories?.name !== selectedCategory) return false
+    if (selectedSubcategory && t.categories?.subcategory !== selectedSubcategory) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (
+        !t.description.toLowerCase().includes(q) &&
+        !t.merchant?.toLowerCase().includes(q) &&
+        !t.categories?.subcategory.toLowerCase().includes(q)
+      ) return false
+    }
+    return true
   })
 
   async function recategoriseAll() {
@@ -142,6 +153,40 @@ export default function TransactionsPage() {
       >
         {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
+
+      <div className="flex gap-2">
+        <select
+          value={selectedCategory}
+          onChange={e => { setSelectedCategory(e.target.value); setSelectedSubcategory('') }}
+          className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors ${selectedCategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-gray-900 border-gray-800 text-gray-400'}`}
+        >
+          <option value="">All categories</option>
+          {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select
+          value={selectedSubcategory}
+          onChange={e => setSelectedSubcategory(e.target.value)}
+          disabled={!selectedCategory}
+          className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-30 ${selectedSubcategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-gray-900 border-gray-800 text-gray-400'}`}
+        >
+          <option value="">All subcategories</option>
+          {subcategoryOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {(selectedCategory || selectedSubcategory) && (
+        <div className="flex items-center justify-between px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+          <p className="text-xs text-indigo-300 truncate">
+            {[selectedCategory, selectedSubcategory].filter(Boolean).join(' › ')}
+          </p>
+          <button
+            onClick={() => { setSelectedCategory(''); setSelectedSubcategory('') }}
+            className="text-xs text-indigo-400 ml-3 shrink-0"
+          >
+            Clear ✕
+          </button>
+        </div>
+      )}
 
       <div className="relative">
         <input
