@@ -97,6 +97,7 @@ export default function Dashboard() {
   })
   const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedSubcategory, setSelectedSubcategory] = useState('')
+  const [allCategories, setAllCategories] = useState<{ name: string; subcategory: string }[]>([])
 
   const fetchDashboard = useCallback(async () => {
     if (!token) return
@@ -112,6 +113,13 @@ export default function Dashboard() {
   }, [token, selectedMonth])
 
   useEffect(() => { fetchDashboard() }, [fetchDashboard])
+
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/categories', { headers: { authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(cats => { if (Array.isArray(cats)) setAllCategories(cats) })
+  }, [token])
 
   const months = Array.from({ length: 24 }, (_, i) => {
     const d = subMonths(new Date(), i)
@@ -142,17 +150,10 @@ export default function Dashboard() {
   const prevTotal = prevSpend.reduce((s, x) => s + x.total, 0)
   const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
 
-  // ── Dropdown options — union of spend data + budget categories ───────────
-  const categoryOptions = Array.from(new Set([
-    ...spend.map(s => s.category_name),
-    ...budgets.map(b => b.categories?.name),
-  ].filter(Boolean) as string[])).sort()
-
+  // ── Dropdown options from full category list ─────────────────────────────
+  const categoryOptions = Array.from(new Set(allCategories.map(c => c.name).filter(Boolean))).sort()
   const subcategoryOptions = selectedCategory
-    ? Array.from(new Set([
-        ...spend.filter(s => s.category_name === selectedCategory).map(s => s.subcategory),
-        ...budgets.filter(b => b.categories?.name === selectedCategory).map(b => b.categories?.subcategory),
-      ].filter(Boolean) as string[])).sort()
+    ? allCategories.filter(c => c.name === selectedCategory).map(c => c.subcategory).filter(Boolean).sort()
     : []
 
   // ── Filtered spend for dashboards 2 & 3 ──────────────────────────────────
