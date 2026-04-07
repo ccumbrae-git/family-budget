@@ -95,6 +95,8 @@ export default function Dashboard() {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [selectedSubcategory, setSelectedSubcategory] = useState('')
 
   const fetchDashboard = useCallback(async () => {
     if (!token) return
@@ -140,14 +142,32 @@ export default function Dashboard() {
   const prevTotal = prevSpend.reduce((s, x) => s + x.total, 0)
   const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
 
-  // ── Derived budget data ───────────────────────────────────────────────────
+  // ── Dropdown options derived from spend data ──────────────────────────────
+  const categoryOptions = Array.from(new Set(spend.map(s => s.category_name).filter(Boolean))).sort()
+  const subcategoryOptions = selectedCategory
+    ? Array.from(new Set(spend.filter(s => s.category_name === selectedCategory).map(s => s.subcategory).filter(Boolean))).sort()
+    : []
+
+  // ── Filtered spend for dashboards 2 & 3 ──────────────────────────────────
+  const filteredSpend = spend.filter(s => {
+    if (selectedCategory && s.category_name !== selectedCategory) return false
+    if (selectedSubcategory && s.subcategory !== selectedSubcategory) return false
+    return true
+  })
+  const filteredBudgets = budgets.filter(b => {
+    if (selectedCategory && b.categories?.name !== selectedCategory) return false
+    if (selectedSubcategory && b.categories?.subcategory !== selectedSubcategory) return false
+    return true
+  })
+
+  // ── Derived budget data (always uses full spend for hero/scorecard) ───────
   const totalBudget = budgets.reduce((s, b) => s + Number(b.monthly_limit), 0)
   const overallPct = totalBudget > 0 ? (totalSpend / totalBudget) * 100 : null
   const remaining = totalBudget > 0 ? totalBudget - totalSpend : 0
 
-  // Subcategory rows — sorted over → warn → ok
-  const subcatRows = budgets.map(b => {
-    const spent = spend.find(s => s.category_id === b.category_id)?.total || 0
+  // Subcategory rows — filtered, sorted over → warn → ok
+  const subcatRows = filteredBudgets.map(b => {
+    const spent = filteredSpend.find(s => s.category_id === b.category_id)?.total || 0
     const limit = Number(b.monthly_limit)
     const pct = limit > 0 ? (spent / limit) * 100 : 0
     const warnAt = Number(b.alert_at_percent) || 80
@@ -163,15 +183,15 @@ export default function Dashboard() {
   const warnCount = subcatRows.filter(r => r.sk === 'warn').length
   const okCount = subcatRows.filter(r => r.sk === 'ok').length
 
-  // Category-level spend
-  const catSpendMap = spend.reduce((acc, s) => {
+  // Category-level spend (filtered)
+  const catSpendMap = filteredSpend.reduce((acc, s) => {
     const k = s.category_name || 'Other'
     acc.set(k, (acc.get(k) || 0) + s.total)
     return acc
   }, new Map<string, number>())
 
-  // Category-level budget (sum subcategory limits per category)
-  const catBudgetMap = budgets.reduce((acc, b) => {
+  // Category-level budget (sum subcategory limits per category, filtered)
+  const catBudgetMap = filteredBudgets.reduce((acc, b) => {
     const k = b.categories?.name || 'Other'
     acc.set(k, (acc.get(k) || 0) + Number(b.monthly_limit))
     return acc
@@ -216,15 +236,59 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ── Month selector ── */}
-      <select
-        value={selectedMonth}
-        onChange={e => setSelectedMonth(e.target.value)}
-        className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 appearance-none"
-        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '16px' }}
-      >
-        {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-      </select>
+      {/* ── Filters ── */}
+      <div className="space-y-2">
+        {/* Month */}
+        <select
+          value={selectedMonth}
+          onChange={e => setSelectedMonth(e.target.value)}
+          className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 appearance-none"
+          style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '16px' }}
+        >
+          {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
+
+        {/* Category + Subcategory */}
+        {categoryOptions.length > 0 && (
+          <div className="flex gap-2">
+            <select
+              value={selectedCategory}
+              onChange={e => { setSelectedCategory(e.target.value); setSelectedSubcategory('') }}
+              className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none appearance-none transition-colors ${selectedCategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '14px' }}
+            >
+              <option value="">All categories</option>
+              {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            <select
+              value={selectedSubcategory}
+              onChange={e => setSelectedSubcategory(e.target.value)}
+              disabled={!selectedCategory}
+              className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none appearance-none transition-colors disabled:opacity-30 ${selectedSubcategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '14px' }}
+            >
+              <option value="">All subcategories</option>
+              {subcategoryOptions.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Active filter pill */}
+        {(selectedCategory || selectedSubcategory) && (
+          <div className="flex items-center justify-between px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+            <p className="text-xs text-indigo-300 truncate">
+              {[selectedCategory, selectedSubcategory].filter(Boolean).join(' › ')}
+            </p>
+            <button
+              onClick={() => { setSelectedCategory(''); setSelectedSubcategory('') }}
+              className="text-xs text-indigo-400 hover:text-white transition-colors ml-3 shrink-0"
+            >
+              Clear ✕
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* ── Hero: Total Spend ── */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-950/80 via-indigo-900/40 to-purple-950/30 border border-indigo-500/20 rounded-2xl p-5">
