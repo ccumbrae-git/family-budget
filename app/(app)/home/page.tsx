@@ -113,7 +113,7 @@ export default function Dashboard() {
 
   useEffect(() => { fetchDashboard() }, [fetchDashboard])
 
-  const months = Array.from({ length: 12 }, (_, i) => {
+  const months = Array.from({ length: 24 }, (_, i) => {
     const d = subMonths(new Date(), i)
     return { value: format(d, 'yyyy-MM'), label: format(d, 'MMM yyyy') }
   })
@@ -142,10 +142,17 @@ export default function Dashboard() {
   const prevTotal = prevSpend.reduce((s, x) => s + x.total, 0)
   const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
 
-  // ── Dropdown options derived from spend data ──────────────────────────────
-  const categoryOptions = Array.from(new Set(spend.map(s => s.category_name).filter(Boolean))).sort()
+  // ── Dropdown options — union of spend data + budget categories ───────────
+  const categoryOptions = Array.from(new Set([
+    ...spend.map(s => s.category_name),
+    ...budgets.map(b => b.categories?.name),
+  ].filter(Boolean) as string[])).sort()
+
   const subcategoryOptions = selectedCategory
-    ? Array.from(new Set(spend.filter(s => s.category_name === selectedCategory).map(s => s.subcategory).filter(Boolean))).sort()
+    ? Array.from(new Set([
+        ...spend.filter(s => s.category_name === selectedCategory).map(s => s.subcategory),
+        ...budgets.filter(b => b.categories?.name === selectedCategory).map(b => b.categories?.subcategory),
+      ].filter(Boolean) as string[])).sort()
     : []
 
   // ── Filtered spend for dashboards 2 & 3 ──────────────────────────────────

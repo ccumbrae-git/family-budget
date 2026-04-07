@@ -38,7 +38,7 @@ export default function TransactionsPage() {
   const [recategorising, setRecategorising] = useState(false)
   const [recatResult, setRecatResult] = useState('')
 
-  const months = Array.from({ length: 12 }, (_, i) => {
+  const months = Array.from({ length: 24 }, (_, i) => {
     const d = subMonths(new Date(), i)
     return { value: format(d, 'yyyy-MM'), label: format(d, 'MMM yyyy') }
   })
