@@ -248,8 +248,7 @@ export default function Dashboard() {
       <select
         value={selectedMonth}
         onChange={e => setSelectedMonth(e.target.value)}
-        className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 appearance-none"
-        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '16px' }}
+        className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60"
       >
         {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
@@ -340,8 +339,7 @@ export default function Dashboard() {
           <select
             value={selectedCategory}
             onChange={e => { setSelectedCategory(e.target.value); setSelectedSubcategory('') }}
-            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none appearance-none transition-colors ${selectedCategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '14px' }}
+            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors ${selectedCategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
           >
             <option value="">All categories</option>
             {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
@@ -351,8 +349,7 @@ export default function Dashboard() {
             value={selectedSubcategory}
             onChange={e => setSelectedSubcategory(e.target.value)}
             disabled={!selectedCategory}
-            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none appearance-none transition-colors disabled:opacity-30 ${selectedSubcategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', backgroundSize: '14px' }}
+            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-30 ${selectedSubcategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
           >
             <option value="">All subcategories</option>
             {subcategoryOptions.map(s => <option key={s} value={s}>{s}</option>)}
