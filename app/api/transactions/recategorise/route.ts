@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     .select('id, description, amount, merchant')
     .eq('user_id', user.id)
     .is('category_id', null)
-    .limit(50)
+    .limit(200)
 
   if (!txs?.length) return NextResponse.json({ updated: 0 })
 
