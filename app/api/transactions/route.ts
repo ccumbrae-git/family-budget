@@ -37,6 +37,28 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data || [])
 }
 
+export async function DELETE(req: NextRequest) {
+  const supabase = createServiceClient()
+  const authHeader = req.headers.get('authorization')
+  if (!authHeader) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { searchParams } = new URL(req.url)
+  const id = searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
+}
+
 export async function PATCH(req: NextRequest) {
   const supabase = createServiceClient()
   const authHeader = req.headers.get('authorization')
