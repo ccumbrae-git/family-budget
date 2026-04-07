@@ -34,7 +34,6 @@ export default function TransactionsPage() {
   })
   const [search, setSearch] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const [recategorising, setRecategorising] = useState(false)
   const [recatResult, setRecatResult] = useState('')
 
@@ -88,17 +87,6 @@ export default function TransactionsPage() {
     setRecatResult(data.updated > 0 ? `✓ Categorised ${data.updated} transactions` : '✓ All transactions already categorised')
     setRecategorising(false)
     fetchTransactions()
-  }
-
-  async function deleteTransaction(txId: string) {
-    if (!token) return
-    await fetch(`/api/transactions?id=${txId}`, {
-      method: 'DELETE',
-      headers: { authorization: `Bearer ${token}` }
-    })
-    setTransactions(prev => prev.filter(t => t.id !== txId))
-    setConfirmDeleteId(null)
-    setEditingId(null)
   }
 
   async function toggleExclude(txId: string, currentExcluded: boolean) {
@@ -211,32 +199,6 @@ export default function TransactionsPage() {
                           <span>{t.excluded ? 'Excluded from budgets' : 'Exclude from budgets'}</span>
                           <span>{t.excluded ? '↩ Include' : '⛔ Exclude'}</span>
                         </button>
-                        {confirmDeleteId === t.id ? (
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => deleteTransaction(t.id)}
-                              className="flex-1 py-2.5 bg-red-600 rounded-lg text-sm font-semibold"
-                            >
-                              Confirm delete
-                            </button>
-                            <button
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="flex-1 py-2.5 bg-gray-800 rounded-lg text-sm text-gray-400"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmDeleteId(t.id)}
-                            className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm bg-gray-800 text-red-400 hover:bg-red-900/20 transition-colors"
-                          >
-                            <span>Delete transaction</span>
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        )}
                         {!t.excluded && (
                           <>
                             <p className="text-xs text-gray-400">Recategorise:</p>
