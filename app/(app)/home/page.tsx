@@ -604,7 +604,8 @@ export default function Dashboard() {
                 />
                 <YAxis hide />
                 <Tooltip
-                  formatter={(v: number) => [`$${v.toLocaleString('en-AU')}`, 'Spend']}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(v: any) => [`$${Number(v).toLocaleString('en-AU')}`, 'Spend']}
                   contentStyle={tooltipStyle}
                   cursor={{ fill: 'rgba(255,255,255,0.03)' }}
                 />
