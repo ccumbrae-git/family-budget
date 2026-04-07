@@ -31,7 +31,7 @@ interface DashboardData {
   prevSpend: SpendItem[]
   budgets: Budget[]
   topVendors: Vendor[]
-  trend: { month: string; label: string; total: number }[]
+  trend: { month: string; label: string; total: number; spend: { category_name: string; subcategory: string; total: number }[] }[]
   isFamily: boolean
 }
 
@@ -216,7 +216,19 @@ export default function Dashboard() {
   const alerts = subcatRows.filter(r => r.sk === 'over' || r.sk === 'warn')
 
   // Trend
-  const trendData = (data?.trend || []).map(t => ({ ...t, total: Math.round(t.total) }))
+  const trendData = (data?.trend || []).map(t => {
+    let total = t.total
+    if (selectedCategory || selectedSubcategory) {
+      total = (t.spend || [])
+        .filter(s => {
+          if (selectedCategory && s.category_name !== selectedCategory) return false
+          if (selectedSubcategory && s.subcategory !== selectedSubcategory) return false
+          return true
+        })
+        .reduce((sum, s) => sum + s.total, 0)
+    }
+    return { ...t, total: Math.round(total) }
+  })
 
   // Group subcategory rows by status for Dashboard 3
   const groupedSubcat: { label: string; rows: typeof subcatRows; sk: StatusKey }[] = []

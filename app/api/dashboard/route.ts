@@ -115,12 +115,12 @@ export async function GET(req: NextRequest) {
     prevSpend = data || []
   }
 
-  // Monthly spend trend (last 6 months)
+  // Monthly spend trend (last 6 months) — include per-category breakdown for client filtering
   const trend = []
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    let ms: { total: number }[] = []
+    let ms: { category_id: string; category_name: string; subcategory: string; total: number }[] = []
     if (familyId) {
       const { data } = await supabase.rpc('get_family_monthly_spend', {
         p_family_id: familyId,
@@ -137,7 +137,8 @@ export async function GET(req: NextRequest) {
     trend.push({
       month: m,
       label: d.toLocaleString('en-AU', { month: 'short' }),
-      total: ms.reduce((sum, s) => sum + s.total, 0)
+      total: ms.reduce((sum, s) => sum + s.total, 0),
+      spend: ms
     })
   }
 
