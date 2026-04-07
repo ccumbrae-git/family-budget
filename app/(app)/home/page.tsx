@@ -146,9 +146,6 @@ export default function Dashboard() {
   const spend = data?.spend || []
   const budgets = data?.budgets || []
   const prevSpend = data?.prevSpend || []
-  const totalSpend = data?.totalSpend || 0
-  const prevTotal = prevSpend.reduce((s, x) => s + x.total, 0)
-  const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
 
   // ── Dropdown options from full category list ─────────────────────────────
   const categoryOptions = Array.from(new Set(allCategories.map(c => c.name).filter(Boolean))).sort()
@@ -156,7 +153,7 @@ export default function Dashboard() {
     ? allCategories.filter(c => c.name === selectedCategory).map(c => c.subcategory).filter(Boolean).sort()
     : []
 
-  // ── Filtered spend for dashboards 2 & 3 ──────────────────────────────────
+  // ── All data filtered by category/subcategory selection ──────────────────
   const filteredSpend = spend.filter(s => {
     if (selectedCategory && s.category_name !== selectedCategory) return false
     if (selectedSubcategory && s.subcategory !== selectedSubcategory) return false
@@ -167,9 +164,17 @@ export default function Dashboard() {
     if (selectedSubcategory && b.categories?.subcategory !== selectedSubcategory) return false
     return true
   })
+  const filteredPrevSpend = prevSpend.filter(s => {
+    if (selectedCategory && s.category_name !== selectedCategory) return false
+    if (selectedSubcategory && s.subcategory !== selectedSubcategory) return false
+    return true
+  })
 
-  // ── Derived budget data (always uses full spend for hero/scorecard) ───────
-  const totalBudget = budgets.reduce((s, b) => s + Number(b.monthly_limit), 0)
+  // ── ALL figures use filtered data ─────────────────────────────────────────
+  const totalSpend = filteredSpend.reduce((s, x) => s + x.total, 0)
+  const prevTotal = filteredPrevSpend.reduce((s, x) => s + x.total, 0)
+  const vsLastMonth = prevTotal > 0 ? ((totalSpend - prevTotal) / prevTotal) * 100 : null
+  const totalBudget = filteredBudgets.reduce((s, b) => s + Number(b.monthly_limit), 0)
   const overallPct = totalBudget > 0 ? (totalSpend / totalBudget) * 100 : null
   const remaining = totalBudget > 0 ? totalBudget - totalSpend : 0
 
@@ -256,14 +261,51 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ── Month selector ── */}
-      <select
-        value={selectedMonth}
-        onChange={e => setSelectedMonth(e.target.value)}
-        className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60"
-      >
-        {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-      </select>
+      {/* ── Filters (month + category + subcategory) ── */}
+      <div className="space-y-2">
+        <select
+          value={selectedMonth}
+          onChange={e => setSelectedMonth(e.target.value)}
+          className="w-full bg-white/[0.04] border border-white/[0.07] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60"
+        >
+          {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
+
+        <div className="flex gap-2">
+          <select
+            value={selectedCategory}
+            onChange={e => { setSelectedCategory(e.target.value); setSelectedSubcategory('') }}
+            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors ${selectedCategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
+          >
+            <option value="">All categories</option>
+            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+
+          <select
+            value={selectedSubcategory}
+            onChange={e => setSelectedSubcategory(e.target.value)}
+            disabled={!selectedCategory}
+            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-30 ${selectedSubcategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
+          >
+            <option value="">All subcategories</option>
+            {subcategoryOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
+        {(selectedCategory || selectedSubcategory) && (
+          <div className="flex items-center justify-between px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+            <p className="text-xs text-indigo-300 truncate">
+              Showing: {[selectedCategory, selectedSubcategory].filter(Boolean).join(' › ')}
+            </p>
+            <button
+              onClick={() => { setSelectedCategory(''); setSelectedSubcategory('') }}
+              className="text-xs text-indigo-400 ml-3 shrink-0"
+            >
+              Clear ✕
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* ── Hero: Total Spend ── */}
       <div className="relative overflow-hidden bg-gradient-to-br from-indigo-950/80 via-indigo-900/40 to-purple-950/30 border border-indigo-500/20 rounded-2xl p-5">
@@ -343,45 +385,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      {/* ── Dashboard Filters ── */}
-      <div className="space-y-2">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Filter Dashboards</p>
-        <div className="flex gap-2">
-          <select
-            value={selectedCategory}
-            onChange={e => { setSelectedCategory(e.target.value); setSelectedSubcategory('') }}
-            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors ${selectedCategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
-          >
-            <option value="">All categories</option>
-            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-
-          <select
-            value={selectedSubcategory}
-            onChange={e => setSelectedSubcategory(e.target.value)}
-            disabled={!selectedCategory}
-            className={`flex-1 min-w-0 border rounded-xl px-3 py-2.5 text-sm focus:outline-none transition-colors disabled:opacity-30 ${selectedSubcategory ? 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200' : 'bg-white/[0.04] border-white/[0.07] text-gray-400'}`}
-          >
-            <option value="">All subcategories</option>
-            {subcategoryOptions.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-
-        {(selectedCategory || selectedSubcategory) && (
-          <div className="flex items-center justify-between px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-            <p className="text-xs text-indigo-300 truncate">
-              {[selectedCategory, selectedSubcategory].filter(Boolean).join(' › ')}
-            </p>
-            <button
-              onClick={() => { setSelectedCategory(''); setSelectedSubcategory('') }}
-              className="text-xs text-indigo-400 hover:text-white transition-colors ml-3 shrink-0"
-            >
-              Clear ✕
-            </button>
-          </div>
-        )}
-      </div>
 
       {/* ══════════════════════════════════════════
           DASHBOARD 1 — Budget Health Scorecard
