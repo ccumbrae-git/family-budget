@@ -27,6 +27,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<{ success?: string; error?: string } | null>(null)
   const [showNewAccount, setShowNewAccount] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -40,6 +41,17 @@ export default function UploadPage() {
   }, [token])
 
   const filteredAccounts = accounts.filter(a => a.bank === selectedBank)
+
+  async function deleteAccount(id: string) {
+    if (!token) return
+    await fetch(`/api/accounts?id=${id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${token}` }
+    })
+    setAccounts(prev => prev.filter(a => a.id !== id))
+    if (selectedAccount === id) setSelectedAccount('')
+    setConfirmDeleteId(null)
+  }
 
   async function createAccount() {
     if (!newAccountName.trim() || !token) return
@@ -137,13 +149,35 @@ export default function UploadPage() {
         {filteredAccounts.length > 0 ? (
           <div className="space-y-1.5">
             {filteredAccounts.map(acc => (
-              <button
-                key={acc.id}
-                onClick={() => setSelectedAccount(acc.id)}
-                className={`w-full p-3 rounded-xl border text-left text-sm transition-all ${selectedAccount === acc.id ? 'border-indigo-500 bg-indigo-900/20' : 'border-gray-800 bg-gray-900'}`}
-              >
-                {acc.account_name}
-              </button>
+              <div key={acc.id} className={`rounded-xl border transition-all ${selectedAccount === acc.id ? 'border-indigo-500 bg-indigo-900/20' : 'border-gray-800 bg-gray-900'}`}>
+                {confirmDeleteId === acc.id ? (
+                  <div className="flex items-center justify-between px-3 py-2.5 gap-2">
+                    <p className="text-xs text-red-400">Delete all transactions from this account?</p>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button onClick={() => deleteAccount(acc.id)} className="px-2.5 py-1 bg-red-600 rounded-lg text-xs font-medium">Delete</button>
+                      <button onClick={() => setConfirmDeleteId(null)} className="px-2.5 py-1 bg-gray-700 rounded-lg text-xs">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => setSelectedAccount(acc.id)}
+                      className="flex-1 p-3 text-left text-sm"
+                    >
+                      {acc.account_name}
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteId(acc.id)}
+                      className="px-3 py-3 text-gray-600 hover:text-red-400 transition-colors"
+                      title="Delete account and all its transactions"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         ) : (

@@ -11,6 +11,7 @@ interface Transaction {
   amount: number
   merchant?: string
   notes?: string
+  excluded?: boolean
   categories?: { id: string; name: string; subcategory: string; icon: string; color: string }
   accounts?: { bank: string; account_name: string }
 }
@@ -88,6 +89,17 @@ export default function TransactionsPage() {
     fetchTransactions()
   }
 
+  async function toggleExclude(txId: string, currentExcluded: boolean) {
+    if (!token) return
+    const res = await fetch('/api/transactions', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id: txId, excluded: !currentExcluded })
+    })
+    const updated = await res.json()
+    setTransactions(prev => prev.map(t => t.id === txId ? { ...t, ...updated } : t))
+  }
+
   async function updateCategory(txId: string, categoryId: string) {
     if (!token) return
     const res = await fetch('/api/transactions', {
@@ -162,7 +174,7 @@ export default function TransactionsPage() {
               </p>
               <div className="bg-gray-900 rounded-xl divide-y divide-gray-800">
                 {grouped[date].map(t => (
-                  <div key={t.id}>
+                  <div key={t.id} className={t.excluded ? 'opacity-40' : ''}>
                     <div
                       className="flex items-center justify-between px-4 py-3 cursor-pointer"
                       onClick={() => setEditingId(editingId === t.id ? null : t.id)}
@@ -170,7 +182,7 @@ export default function TransactionsPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{t.merchant || t.description}</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {t.categories ? `${t.categories.icon} ${t.categories.subcategory}` : '⚪ Uncategorised'}
+                          {t.excluded ? '⛔ Excluded' : t.categories ? `${t.categories.icon} ${t.categories.subcategory}` : '⚪ Uncategorised'}
                         </p>
                       </div>
                       <p className={`text-sm font-semibold ml-3 shrink-0 ${t.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -179,21 +191,32 @@ export default function TransactionsPage() {
                     </div>
 
                     {editingId === t.id && (
-                      <div className="px-4 pb-3 space-y-2">
-                        <p className="text-xs text-gray-400">Recategorise:</p>
-                        <div className="max-h-40 overflow-y-auto space-y-1">
-                          {categories.map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => updateCategory(t.id, c.id)}
-                              className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center gap-2 transition-colors ${t.categories?.id === c.id ? 'bg-indigo-900/40 text-indigo-300' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
-                            >
-                              <span>{c.icon}</span>
-                              <span>{c.subcategory}</span>
-                              <span className="text-gray-500">· {c.name}</span>
-                            </button>
-                          ))}
-                        </div>
+                      <div className="px-4 pb-3 space-y-3">
+                        <button
+                          onClick={() => toggleExclude(t.id, !!t.excluded)}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors ${t.excluded ? 'bg-yellow-900/30 border border-yellow-700/50 text-yellow-300' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                        >
+                          <span>{t.excluded ? 'Excluded from budgets' : 'Exclude from budgets'}</span>
+                          <span>{t.excluded ? '↩ Include' : '⛔ Exclude'}</span>
+                        </button>
+                        {!t.excluded && (
+                          <>
+                            <p className="text-xs text-gray-400">Recategorise:</p>
+                            <div className="max-h-40 overflow-y-auto space-y-1">
+                              {categories.map(c => (
+                                <button
+                                  key={c.id}
+                                  onClick={() => updateCategory(t.id, c.id)}
+                                  className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center gap-2 transition-colors ${t.categories?.id === c.id ? 'bg-indigo-900/40 text-indigo-300' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                                >
+                                  <span>{c.icon}</span>
+                                  <span>{c.subcategory}</span>
+                                  <span className="text-gray-500">· {c.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

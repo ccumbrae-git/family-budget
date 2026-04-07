@@ -46,11 +46,16 @@ export async function PATCH(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { id, category_id, notes } = body
+  const { id, category_id, notes, excluded } = body
+
+  const updates: Record<string, unknown> = {}
+  if (category_id !== undefined) { updates.category_id = category_id; updates.category_override = true }
+  if (notes !== undefined) updates.notes = notes
+  if (excluded !== undefined) updates.excluded = excluded
 
   const { data, error } = await supabase
     .from('transactions')
-    .update({ category_id, notes, category_override: true })
+    .update(updates)
     .eq('id', id)
     .eq('user_id', user.id)
     .select('*, categories(*)')
