@@ -49,8 +49,9 @@ export async function GET(req: NextRequest) {
   const totalSpend = spend.reduce((sum, s) => sum + s.total, 0)
 
   // Recent transactions (family-aware)
+  const [y, mo] = month.split('-').map(Number)
   const start = `${month}-01`
-  const end = `${month}-31`
+  const end = `${month}-${new Date(y, mo, 0).getDate()}`
   let recentQuery = supabase
     .from('transactions')
     .select('*, categories(*)')

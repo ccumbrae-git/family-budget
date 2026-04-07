@@ -24,8 +24,9 @@ export async function GET(req: NextRequest) {
     .range(offset, offset + limit - 1)
 
   if (month) {
+    const [y, mo] = month.split('-').map(Number)
     const start = `${month}-01`
-    const end = `${month}-31`
+    const end = `${month}-${new Date(y, mo, 0).getDate()}`
     query = query.gte('date', start).lte('date', end)
   }
   if (categoryId) {
